@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+   <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Chat with AI</title>
+      <style>
+         body {
+         font-family: Arial, sans-serif;
+         background-color: #f4f4f4;
+         margin: 0;
+         padding: 0;
+         display: flex;
+         flex-direction: column;
+         height: 100vh;
+         }
+         #chat-container {
+         flex: 1;
+         padding: 20px;
+         display: flex;
+         flex-direction: column;
+         overflow-y: scroll;
+         background-color: white;
+         border-bottom: 1px solid #ccc;
+         }
+         .message {
+         padding: 10px;
+         margin: 5px 0;
+         border-radius: 10px;
+         max-width: 70%;
+         }
+         .user-message {
+         align-self: flex-end;
+         background-color: #0084ff;
+         color: white;
+         }
+         .ai-message {
+         align-self: flex-start;
+         background-color: #e5e5ea;
+         color: black;
+         }
+         .audio-message {
+         display: flex;
+         align-items: center;
+         }
+         .audio-message audio {
+         margin-left: 10px;
+         }
+         #input-container {
+         padding: 10px;
+         display: flex;
+         border-top: 1px solid #ccc;
+         align-items: center;
+         }
+         #message-input {
+         flex: 1;
+         padding: 10px;
+         font-size: 16px;
+         border: 1px solid #ccc;
+         border-radius: 5px;
+         }
+         #send-button {
+         padding: 10px 20px;
+         margin-left: 10px;
+         font-size: 16px;
+         background-color: #0084ff;
+         color: white;
+         border: none;
+         border-radius: 5px;
+         cursor: pointer;
+         }
+         #send-button:hover {
+         background-color: #0073e6;
+         }
+         #record-button {
+         padding: 10px;
+         margin-left: 10px;
+         font-size: 16px;
+         background-color: #ff5733;
+         color: white;
+         border: none;
+         border-radius: 5px;
+         cursor: pointer;
+         }
+         #record-button:hover {
+         background-color: #c70039;
+         }
+         #stop-button {
+         padding: 10px;
+         margin-left: 10px;
+         font-size: 16px;
+         background-color: #e5e5ea;
+         color: black;
+         border: none;
+         border-radius: 5px;
+         cursor: pointer;
+         }
+         #stop-button:hover {
+         background-color: #d4d4d4;
+         }
+      </style>
+   </head>
+   <body>
+      <div id="chat-container"></div>
+      <div id="input-container">
+         <input type="text" id="message-input" placeholder="Type your message here..." />
+         <button id="send-button">Send</button>
+         <button id="record-button">Record</button>
+         <button id="stop-button" style="display: none;">Stop</button>
+      </div>
+      <script>
+         const chatContainer = document.getElementById('chat-container');
+         const messageInput = document.getElementById('message-input');
+         const sendButton = document.getElementById('send-button');
+         const recordButton = document.getElementById('record-button');
+         const stopButton = document.getElementById('stop-button');
+         
+         let mediaRecorder;
+         let audioChunks = [];
+         
+         function addMessage(content, sender, isAudio = false) {
+         const messageDiv = document.createElement('div');
+         messageDiv.classList.add('message', sender === 'user' ? 'user-message' : 'ai-message');
+         
+         if (isAudio) {
+         const audio = document.createElement('audio');
+         audio.controls = true;
+         audio.src = URL.createObjectURL(content);
+         messageDiv.classList.add('audio-message');
+         messageDiv.appendChild(audio);
+         } else {
+         messageDiv.innerText = content;
+         }
+         
+         chatContainer.appendChild(messageDiv);
+         chatContainer.scrollTop = chatContainer.scrollHeight;
+         }
+         
+         async function sendTextMessage() {
+         const userMessage = messageInput.value;
+         if (userMessage.trim() === "") return;
+         
+         addMessage(userMessage, 'user');
+         messageInput.value = '';
+         
+         try {
+         const response = await fetch('http://192.168.1.43:5000/chat', {
+         method: 'POST',
+         headers: {
+         'Content-Type': 'application/json'
+         },
+         body: JSON.stringify({ text: userMessage })
+         });
+         
+         const data = await response.json();
+         const aiMessage = data.response;
+         
+         addMessage(aiMessage, 'ai');
+         } catch (error) {
+         console.error('Error:', error);
+         addMessage('Error connecting to AI server.', 'ai');
+         }
+         }
+         
+         async function sendAudioMessage(blob) {
+         const formData = new FormData();
+         formData.append('file', blob, 'recording.webm');
+         
+         try {
+         const response = await fetch('http://192.168.1.43:5000/upload', {
+         method: 'POST',
+         body: formData
+         });
+         
+         const data = await response.blob();
+         addMessage(data, 'ai', true);
+         } catch (error) {
+         console.error('Error:', error);
+         addMessage('Error connecting to AI server.', 'ai');
+         }
+         }
+         
+         async function startRecording() {
+         if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+         try {
+         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+         mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+         mediaRecorder.ondataavailable = event => {
+         audioChunks.push(event.data);
+         };
+         mediaRecorder.onstop = () => {
+         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+         audioChunks = [];
+         sendAudioMessage(audioBlob);
+         };
+         mediaRecorder.start();
+         recordButton.style.display = 'none';
+         stopButton.style.display = 'inline';
+         } catch (error) {
+         console.error('Error accessing microphone:', error);
+         addMessage('Error accessing microphone.', 'ai');
+         }
+         } else {
+         addMessage('Media devices not supported.', 'ai');
+         }
+         }
+         
+         function stopRecording() {
+         if (mediaRecorder) {
+         mediaRecorder.stop();
+         recordButton.style.display = 'inline';
+         stopButton.style.display = 'none';
+         }
+         }
+         
+         sendButton.addEventListener('click', sendTextMessage);
+         recordButton.addEventListener('click', startRecording);
+         stopButton.addEventListener('click', stopRecording);
+         messageInput.addEventListener('keydown', (event) => {
+         if (event.key === 'Enter') {
+         sendTextMessage();
+         }
+         });
+         
+         window.addEventListener('load', () => {
+         addMessage('Привет, я Eva, готова с тобой поболтать', 'ai');
+         });
+      </script>
+   </body>
+</html>
