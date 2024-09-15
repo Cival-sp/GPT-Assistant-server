@@ -1,1 +1,0 @@
-python E:\Python projects\Python http server\Main_server.py
