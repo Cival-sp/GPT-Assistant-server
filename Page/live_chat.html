@@ -28,6 +28,9 @@
             margin: 5px 0;
             border-radius: 10px;
             max-width: 70%;
+            opacity: 0; /* Скрыто по умолчанию */
+            transform: translateY(20px); /* Немного смещено вниз */
+            animation: fadeInUp 0.5s forwards; /* Анимация появления */
         }
         .user-message {
             align-self: flex-end;
@@ -64,6 +67,14 @@
         #send-button:hover {
             background-color: #0073e6;
         }
+
+        /* Анимация появления */
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
     </style>
 </head>
 <body>
@@ -79,25 +90,25 @@
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
 
-        // Function to add a message to the chat
+        // Функция для добавления сообщения в чат
         function addMessage(text, sender) {
             const messageDiv = document.createElement('div');
             messageDiv.classList.add('message', sender === 'user' ? 'user-message' : 'ai-message');
             messageDiv.innerText = text;
             chatContainer.appendChild(messageDiv);
-            chatContainer.scrollTop = chatContainer.scrollHeight; // Scroll to bottom
+            chatContainer.scrollTop = chatContainer.scrollHeight; // Прокрутка вниз
         }
 
-        // Function to send message to the server
+        // Функция для отправки сообщения на сервер
         async function sendMessage() {
             const userMessage = messageInput.value;
             if (userMessage.trim() === "") return;
 
-            // Add user's message to the chat
+            // Добавление сообщения пользователя
             addMessage(userMessage, 'user');
             messageInput.value = '';
 
-            // Send the message to the AI server
+            // Отправка сообщения на сервер AI
             try {
                 const response = await fetch('http://192.168.1.103:5000/chat', {
                     method: 'POST',
@@ -108,33 +119,34 @@
                 });
 
                 const data = await response.json();
-                console.log(data); // This will show you the exact structure of the response
+                console.log(data); // Посмотреть структуру ответа
 
-                // Corrected key to access response
+                // Исправленный ключ для доступа к ответу
                 const aiMessage = data.response;
 
-                // Add AI's message to the chat
+                // Добавление сообщения AI
                 addMessage(aiMessage, 'ai');
             } catch (error) {
-                console.error('Error:', error);
-                addMessage('Error connecting to AI server.', 'ai');
+                console.error('Ошибка:', error);
+                addMessage('Ошибка соединения с сервером AI.', 'ai');
             }
         }
 
-        // Event listener for send button
+        // Обработчик для кнопки отправки
         sendButton.addEventListener('click', sendMessage);
 
-        // Event listener for pressing "Enter" key
+        // Обработчик для нажатия клавиши "Enter"
         messageInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
                 sendMessage();
             }
         });
 
-        // Display initial message from AI on page load
+        // Отображение приветственного сообщения от AI при загрузке страницы
         window.addEventListener('load', () => {
             addMessage('Привет, я Eva, готова с тобой поболтать', 'ai');
         });
     </script>
 </body>
 </html>
+

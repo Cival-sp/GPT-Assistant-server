@@ -1,45 +1,91 @@
 import time
 import os
 import copy
+import json
+
 
 class ChatMessage:
     def __init__(self, sender, message="", unixTime=None):
-        # Если unixTime не передан, используется текущее время
         self.sender = sender
         self.message = message
         self.unixTime = unixTime if unixTime is not None else time.time()
 
     def getStr(self):
-        # Преобразуем unixTime в читаемый формат
         result = time.strftime("%H:%M:%S", time.localtime(self.unixTime)) + " " + self.sender + ": " + self.message + "\n"
         return result
 
+    def to_dict(self):
+        """Сериализация объекта в словарь."""
+        return {
+            'sender': self.sender,
+            'message': self.message,
+            'unixTime': self.unixTime
+        }
+
+    @staticmethod
+    def from_dict(data):
+        """Десериализация из словаря в объект ChatMessage."""
+        return ChatMessage(data['sender'], data['message'], data['unixTime'])
+
 
 class ChatHistory:
-    def __init__(self):
-        # Теперь ChatMessages - атрибут экземпляра, уникальный для каждого объекта
+    def __init__(self, existanceTime=3600/2):
         self.ChatMessages = []
-
+        self.creationTimeUnix = time.time()
+        self.expirationTimeUnix = self.creationTimeUnix + existanceTime
+        self._iter_index = 0
 
     def add(self, sender, message):
-        # Добавляем новое сообщение в историю
         self.ChatMessages.append(ChatMessage(sender, message))
 
     def last(self):
-        # Возвращаем последнее сообщение, если оно есть
         return self.ChatMessages[-1].getStr() if self.ChatMessages else None
 
     def save(self, filePath, fileName):
-        # Сохраняем все сообщения в указанный файл
         with open(filePath + fileName, "w") as file:
-            for msg in self.ChatMessages:
-                file.write(msg.getStr())
+            json.dump(self.to_dict(), file)  # Сохраняем историю в JSON
 
     @staticmethod
-    def load( filePath, fileName):
-        # Читаем все строки из файла (это пример; тут можно добавить разбор строки для восстановления объектов)
+    def load(filePath, fileName):
         with open(filePath + fileName, "r") as file:
-            return file.readlines()
+            data = json.load(file)
+            chat_history = ChatHistory()
+            chat_history.from_dict(data)  # Заполняем историю данными из файла
+            return chat_history
+
+    def to_dict(self):
+        """Сериализация объекта в словарь."""
+        return {
+            'ChatMessages': [msg.to_dict() for msg in self.ChatMessages],
+            'creationTimeUnix': self.creationTimeUnix,
+            'expirationTimeUnix': self.expirationTimeUnix
+        }
+
+    def from_dict(self, data):
+        """Десериализация из словаря в объект ChatHistory."""
+        self.creationTimeUnix = data['creationTimeUnix']
+        self.expirationTimeUnix = data['expirationTimeUnix']
+        self.ChatMessages = [ChatMessage.from_dict(msg) for msg in data['ChatMessages']]
+
+    def __getitem__(self, index):
+        return self.ChatMessages[index]
+
+    def __iter__(self):
+        self._iter_index = 0
+        return self
+
+    def __next__(self):
+        if self._iter_index < len(self.ChatMessages):
+            result = self.ChatMessages[self._iter_index]
+            self._iter_index += 1
+            return result
+        else:
+            raise StopIteration
+
+    def get_history(self):
+        # Преобразуем сообщения в формат, ожидаемый в importHistory
+        return [{'role': msg.sender, 'content': msg.message} for msg in self.ChatMessages]
+
 
 
 class Api:
@@ -111,3 +157,4 @@ class SuperVisor:
         self.countdown = 0
         self.__countdownStart = -1
         self.path = []
+

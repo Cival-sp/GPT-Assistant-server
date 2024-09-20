@@ -4,35 +4,39 @@ import aiohttp
 from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 
-BOT_TOKEN = '7394227511:AAE3d1iyhGaWLQhRqv-9LUvrIMDQyBXEw34'
 
+BOT_TOKEN = '7394227511:AAE3d1iyhGaWLQhRqv-9LUvrIMDQyBXEw34'
 TEXT_URL = 'http://localhost:5000/chat'
 AUDIO_URL = 'http://localhost:5000/say'
 
 async def start(update: Update, context: CallbackContext) -> None:
     """Обработчик команды /start"""
+    user_id = update.effective_user.id
     await update.message.reply_text(
         'Привет! Отправь мне текст или голосовое сообщение.\nК сожалению, я пока не запоминаю историю сообщений, задавай полный вопрос.'
     )
 
 async def handle_text(update: Update, context: CallbackContext) -> None:
     """Обработка текстового сообщения"""
+    user_id = update.effective_user.id
     text = update.message.text
-    print(f"Запрос: {text}")
+    print(f"User {user_id} запрос: {text}")
 
-    # Асинхронный POST-запрос для отправки текста на сервер
+    # Асинхронный POST-запрос для отправки текста на сервер с заголовком ID
+    headers = {'ID': str(user_id)}
     async with aiohttp.ClientSession() as session:
-        async with session.post(TEXT_URL, json={'text': text}) as response:
+        async with session.post(TEXT_URL, json={'text': text}, headers=headers) as response:
             if response.status == 200:
                 result = await response.json()
                 result_text = result.get('response', 'Ошибка обработки текста')
-                print(f"Ответ: {result_text}")
+                print(f"User {user_id} ответ: {result_text}")
                 await update.message.reply_text(result_text)
             else:
                 await update.message.reply_text('Ошибка запроса к серверу.')
 
 async def handle_audio(update: Update, context: CallbackContext) -> None:
     """Обработка голосового сообщения"""
+    user_id = update.effective_user.id
     file = await update.message.voice.get_file()
 
     # Скачивание голосового сообщения как bytearray
@@ -45,9 +49,10 @@ async def handle_audio(update: Update, context: CallbackContext) -> None:
     form = aiohttp.FormData()
     form.add_field('file', audio_bytes, filename='audio.ogg', content_type='audio/ogg')
 
-    # Асинхронный POST-запрос для отправки аудиофайла на сервер
+    # Асинхронный POST-запрос для отправки аудиофайла на сервер с заголовком ID
+    headers = {'ID': str(user_id)}
     async with aiohttp.ClientSession() as session:
-        async with session.post(AUDIO_URL, data=form) as response:
+        async with session.post(AUDIO_URL, data=form, headers=headers) as response:
             if response.status == 200:
                 audio_wav = io.BytesIO(await response.read())
                 await update.message.reply_voice(voice=InputFile(audio_wav, filename='response.wav'))
@@ -65,3 +70,6 @@ async def main() -> None:
 
     # Запуск long-polling
     await application.run_polling()
+
+if __name__ == '__main__':
+    asyncio.run(main())
