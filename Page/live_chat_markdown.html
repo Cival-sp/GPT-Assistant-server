@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat with AI</title>
+<style>
+body {
+font-family: Arial, sans-serif;
+background-color: #f4f4f4;
+margin: 0;
+padding: 0;
+display: flex;
+flex-direction: column;
+height: 100vh;
+}
+#chat-container {
+flex: 1;
+padding: 20px;
+display: flex;
+flex-direction: column;
+overflow-y: scroll;
+background-color: white;
+border-bottom: 1px solid #ccc;
+}
+.message {
+padding: 10px;
+margin: 5px 0;
+border-radius: 10px;
+max-width: 70%;
+opacity: 0;
+transform: translateY(20px);
+animation: fadeInUp 0.5s forwards;
+}
+.user-message {
+align-self: flex-end;
+background-color: #0084ff;
+color: white;
+}
+.ai-message {
+align-self: flex-start;
+background-color: #e5e5ea;
+color: black;
+}
+#input-container {
+padding: 10px;
+display: flex;
+border-top: 1px solid #ccc;
+}
+#message-input {
+flex: 1;
+padding: 10px;
+font-size: 16px;
+border: 1px solid #ccc;
+border-radius: 5px;
+}
+#send-button {
+padding: 10px 20px;
+margin-left: 10px;
+font-size: 16px;
+background-color: #0084ff;
+color: white;
+border: none;
+border-radius: 5px;
+cursor: pointer;
+}
+#send-button:hover {
+background-color: #0073e6;
+}
+@keyframes fadeInUp {
+to {
+opacity: 1;
+transform: translateY(0);
+}
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+<div id="chat-container"></div>
+<div id="input-container">
+<input type="text" id="message-input" placeholder="Type your message here...">
+<button id="send-button">Send</button>
+</div>
+<script>
+const chatContainer = document.getElementById('chat-container');
+const messageInput = document.getElementById('message-input');
+const sendButton = document.getElementById('send-button');
+
+// Функция для добавления сообщения в чат
+function addMessage(text, sender) {
+const messageDiv = document.createElement('div');
+messageDiv.classList.add('message', sender === 'user' ? 'user-message' : 'ai-message');
+messageDiv.innerHTML = marked(text);
+chatContainer.appendChild(messageDiv);
+chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+// Функция для отправки сообщения на сервер
+async function sendMessage() {
+const userMessage = messageInput.value;
+if (userMessage.trim() === "") return;
+
+// Добавление сообщения пользователя
+addMessage(userMessage, 'user');
+messageInput.value = '';
+
+// Отправка сообщения на сервер AI
+try {
+const response = await fetch('http://192.168.1.103:5000/chat', {
+method: 'POST',
+headers: {
+'Content-Type': 'application/json'
+},
+body: JSON.stringify({ text: userMessage })
+});
+
+const data = await response.json();
+console.log(data); // Проверка структуры ответа
+const aiMessage = data.response;
+addMessage(aiMessage, 'ai');
+} catch (error) {
+console.error('Ошибка:', error);
+addMessage('Ошибка соединения с сервером AI.', 'ai');
+}
+}
+
+// Обработчики для кнопки отправки и клавиши Enter
+sendButton.addEventListener('click', sendMessage);
+messageInput.addEventListener('keydown', (event) => {
+if (event.key === 'Enter') {
+sendMessage();
+}
+});
+
+// Приветственное сообщение от AI при загрузке страницы
+window.addEventListener('load', () => {
+addMessage('Привет, я Eva, готова с тобой поболтать', 'ai');
+});
+</script>
+</body>
+</html>
