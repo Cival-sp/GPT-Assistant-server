@@ -90,7 +90,6 @@ class ChatHistory:
 
 class Api:
     def __init__(self, host, url="/", token="", method="POST", name=""):
-        # Инициализация всех параметров API
         self.url = url
         self.host = host
         self.token = token
@@ -153,7 +152,6 @@ class SuperVisor:
         return deleteCounter
 
     def reset(self):
-        # Сброс всех параметров
         self.countdown = 0
         self.__countdownStart = -1
         self.path = []

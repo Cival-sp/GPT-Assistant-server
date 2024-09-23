@@ -12,9 +12,8 @@ def addMessage(json_data, role, msg):
     """
     if "messages" not in json_data:
         json_data["messages"] = []
-    # Добавляем новое сообщение как словарь в список
     json_data["messages"].append({"role": role, "content": msg})
-    print(f"Added message: role={role}, msg={msg}")
+    #print(f"Added message: role={role}, msg={msg}")
     return json_data
 
 def extractMessageContext(token, Message_):
@@ -29,7 +28,7 @@ def extractMessageContext(token, Message_):
     Message_ = context
     return len(context)
 
-def importHistory(token, json_data, database, ID, message_limit=20):
+def importHistory(token, json_data, database, ID, message_limit=10):
     """
     Импортирует историю сообщений из базы данных в JSON-данные.
 
@@ -45,7 +44,7 @@ def importHistory(token, json_data, database, ID, message_limit=20):
         return json_data
 
     if ID not in database:
-        print(f"No history found for ID: {ID}")
+        print(f"Не найдена история сообщений для ID: {ID}")
         return json_data
 
     history = database[ID].get_history()  # Получаем историю сообщений из ChatHistory
@@ -53,7 +52,7 @@ def importHistory(token, json_data, database, ID, message_limit=20):
         print(f"Expected list for history, got {type(history).__name__}")
         return json_data
 
-    # Ограничиваем количество сообщений, если передан лимит
+    # Ограничиваем количество сообщений
     if message_limit is not None:
         history = history[:message_limit]
 
@@ -61,8 +60,8 @@ def importHistory(token, json_data, database, ID, message_limit=20):
         if not isinstance(msg, dict) or 'role' not in msg or 'content' not in msg:
             print(f"Invalid message format at index {index}: {msg}")
             continue
-        if index >= 3 and len(msg["content"]) > 300:
-            msg["content"] = extractMessageContext(token, msg["content"])
+        #if index >= 3 and len(msg["content"]) > 300:
+            #msg["content"] = extractMessageContext(token, msg["content"])
         json_data = addMessage(json_data, msg['role'], msg['content'])
 
     return json_data
@@ -109,18 +108,21 @@ def gpt_module(token, user_text=None, *, ID=None, json_path="Preset/gpt_template
         #print(f"Request data: {json.dumps(gpt_request_data, ensure_ascii=False, indent=2)}")
 
         # Выполнение POST-запроса к GPT API
+        print(gpt_request_data)
         response = requests.post(url, headers=headers, json=gpt_request_data)
 
-        # Проверка успешности запроса
+
         if response.status_code == 200:
-            # Получаем JSON-ответ от сервера
             gpt_response = response.json()
             # Извлекаем из json ответа строку с текстом ответа
             assistant_message = gpt_response['choices'][0]['message']['content']
 
             if ID is not None and database is not None and ID in database:
-                # Дописываем ответ GPT в историю по ID пользователя
+                # Дописываем историю сообщений по ID пользователя
+                print("Записано")
+                database[ID].add("user", user_text)
                 database[ID].add("assistant", assistant_message)
+
             # Передаем ответ следующему модулю для обработки
             #print(gpt_response)
             return assistant_message

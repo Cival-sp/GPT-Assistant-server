@@ -7,12 +7,12 @@ import signal
 import sys
 import threading
 import secrets
-import string
 
 
-from DatabaseModule import Users, Person, UserDatabase
+
+from DatabaseModule import Users
 from STTService import stt_module
-from GPTservice import gpt_module, addMessage, importHistory
+from GPTservice import gpt_module
 from TTSModule import tts_module
 from Identifier import IDPool
 from Utility import *
@@ -38,9 +38,7 @@ def loadCfg(FileName):
         print(f"Ошибка во время чтения файла конфигурации:{e} \nОстановка программы")
         sys.exit()
 def generate_random_key(length=16):
-    # Определяем возможные символы для ключа (только цифры)
     characters = '0123456789'
-    # Генерируем случайный ключ заданной длины
     random_key = ''.join(secrets.choice(characters) for _ in range(length))
     return random_key
 
@@ -59,17 +57,15 @@ print("---------------------------------")
 AiServer = Flask(__name__)
 WebServer = Flask(__name__, template_folder=os.path.join(os.getcwd(), ServerConfiguration["TemplateFolder"]))
 
-# Настраиваем CORS
 CORS(AiServer)
 
 
-
 def Shutdown():
-    # Дождаться завершения всех потоков
+
     for thread in threads:
         thread.join()
 
-    # Сохранить данные пользователей перед завершением
+
     for user in Database.values():
         user.save()
 
@@ -93,7 +89,7 @@ def saveTextInDatabase(ID, database, text, role="user"):
     """
     if ID is not None:
         userchat = database[ID]
-        userchat.append(role, text)
+        userchat.add(role, text)
 
 def signal_handler(sig, frame):
     """
@@ -103,6 +99,7 @@ def signal_handler(sig, frame):
     :param frame: object Контекст выполнения.
     """
     print("Завершение программы")
+    Shutdown()
     sys.exit(0)
 
 def run_server(app, host, port):
@@ -116,13 +113,7 @@ def run_server(app, host, port):
     app.run(host=host, port=port)
 
 def allowed_file(filename):
-    """
-    Проверяет, допустимо ли расширение файла.
-
-    :param filename: str Имя файла для проверки.
-    :return: bool True, если файл допустим, иначе False.
-    """
-    return True  # Здесь можно добавить проверку на расширение файла
+    return True
 
 def process_audio(input_filepath, USERID=None):
     """
@@ -132,18 +123,16 @@ def process_audio(input_filepath, USERID=None):
     :param USERID: str Идентификатор пользователя (по желанию).
     :return: tuple (response_filepath, answer_text) Путь к выходному файлу и текст ответа.
     """
-    response_filepath = None
-    answer_text = None
     try:
         # Выделяем текст из аудиофайла
         rec_text = stt_module(input_filepath, ServerConfiguration["OpenAiToken"])
-        # Записываем в историю чата
-        saveTextInDatabase(USERID, Database, rec_text)
         # Отправляем текст к GPT
         answer_text = gpt_module(ServerConfiguration["OpenAiToken"], user_text=rec_text, ID=USERID,
                                  json_path="Preset/gpt_template_chat.json", database=Database)
+        response_filepath = tts_module(answer_text, ServerConfiguration["OpenAiToken"])
     except Exception as e:
         print(f"Ошибка в обработке запроса: {e}")
+        return None,None
     answer_text = answer_text or "Извините. В текущий момент, я не могу обработать ваш запрос"
     return response_filepath, answer_text
 
@@ -162,15 +151,32 @@ def run_telegram_bot_in_thread(loop):
     asyncio.set_event_loop(loop)
     loop.run_until_complete(run_telegram_bot_async())
 
-
+def printRequest(request):
+    print("---- Incoming Request ----")
+    print(f"Method: {request.method}")
+    print(f"URL: {request.url}")
+    print("Headers:")
+    print(request.headers)
+    # print("Body:")
+    # (request.get_data(as_text=True))
+    print("--------------------------")
 
 @AiServer.before_request
 def RequestPreHandler():
     """
     Обрабатывает запросы перед их выполнением, устанавливая идентификатор пользователя.
     """
+    printRequest(request)
+    print("--------------------------------------")
     user_ip = request.remote_addr
     user_agent = request.headers.get('User-Agent')
+
+    if request.headers.get('X-user_id') is not None:
+        tg_user_id = request.headers.get('X-user_id')
+        user_agent += ':'
+        user_agent += str(tg_user_id)
+        print(f"Обнаружен telegram id {tg_user_id}")
+
     ID = user_id_pool.getId(user_ip, user_agent)
     g.user_id = ID
     ID = str(ID)
@@ -185,28 +191,31 @@ def say():
 
     :return: Response Ответ с файлом или сообщением об ошибке.
     """
+
     if 'file' not in request.files:
-        return "No file part", 401
+        return "No file part", 400
 
     file = request.files['file']
 
+
     if file.filename == '':
-        return "No selected file", 402
+        return "No selected file", 400
 
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
         input_filepath = os.path.join(ServerConfiguration["INPUT_FOLDER"], filename)
+        # Сохраняем файл
         file.save(input_filepath)
-        output_filepath, answer_text = process_audio(input_filepath)
-
-        user_id = g.user_id
+        # Проверка user_id
+        user_id = g.get('user_id')
         if user_id is None:
-            return "User doesn't have ID", 506
-        if output_filepath is None:
-            return "No output file found", 505
-        return send_file(output_filepath, as_attachment=True, download_name=filename)
+            return "User doesn't have ID", 550
 
-    return "File type not allowed", 403
+        output_filepath, answer_text = process_audio(input_filepath,user_id)
+        if output_filepath is None:
+            return "No output file found", 551
+        return send_file(output_filepath, as_attachment=True, download_name=filename)
+    return "File type not allowed", 415
 
 @AiServer.route('/chat', methods=['POST'])
 def chat():
@@ -225,13 +234,7 @@ def chat():
 
 @AiServer.route('/download/<filename>', methods=['GET'])
 def download_file(filename):
-    """
-    Позволяет пользователю скачать файл по указанному имени.
-
-    :param filename: str Имя файла для скачивания.
-    :return: Response Ответ с файлом или сообщением об ошибке.
-    """
-    return send_file(os.path.join(ServerConfiguration["OUTPUT_FOLDER"], filename), as_attachment=True)
+    return #send_file(os.path.join(ServerConfiguration["OUTPUT_FOLDER"], filename), as_attachment=True)
 
 @WebServer.route("/live_chat", methods=['GET'])
 def live_chat():
@@ -253,7 +256,7 @@ def live_chat_audio():
 @WebServer.route("/favicon.ico", methods=['GET'])
 def favicon():
 
-    return
+    return 500
 
 @WebServer.route("/shutdown", methods=['GET'])
 def exit():
@@ -285,12 +288,12 @@ if __name__ == '__main__':
         web_thread.start()
         threads.append(web_thread)
 
-    if ServerConfiguration["TgBot_enable"]:
-        loop = asyncio.new_event_loop()
-        tg_thread = threading.Thread(target=run_telegram_bot_in_thread, args=(loop,))
-        tg_thread.daemon = True
-        tg_thread.start()
-        threads.append(tg_thread)
+    #if ServerConfiguration["TgBot_enable"]:
+        # loop = asyncio.new_event_loop()
+        # tg_thread = threading.Thread(target=run_telegram_bot_in_thread, args=(loop,))
+        # tg_thread.daemon = True
+        # tg_thread.start()
+        # threads.append(tg_thread)
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -300,6 +303,10 @@ if __name__ == '__main__':
             time.sleep(1)
     except KeyboardInterrupt:
         print("Основной поток прерван, программа завершится.")
+        Shutdown()
+        sys.exit(0)
+    except Exception as e:
+        print(e)
         Shutdown()
         sys.exit(0)
 

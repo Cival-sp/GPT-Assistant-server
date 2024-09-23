@@ -5,7 +5,7 @@ from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 
 
-BOT_TOKEN = '7394227511:AAE3d1iyhGaWLQhRqv-9LUvrIMDQyBXEw34'
+BOT_TOKEN = ''
 TEXT_URL = 'http://localhost:5000/chat'
 AUDIO_URL = 'http://localhost:5000/say'
 

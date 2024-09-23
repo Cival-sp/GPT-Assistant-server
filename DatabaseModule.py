@@ -31,18 +31,17 @@ class UserDatabase:
     def toDict(self):
         return {
             'user_id': self.user_id,
-            'user_info': self.user_info.to_dict(),  # Используем метод to_dict
-            'chat_log': self.chat_log.to_dict(),  # Предполагается, что есть метод для сериализации chat_log
+            'user_info': self.user_info.to_dict(),
+            'chat_log': self.chat_log.to_dict(),
             'last_seen': self.last_seen,
             'additional_info': self.additional_info
         }
 
     @classmethod
     def fromDict(cls, data):
-        # Добавьте обработку для создания объекта ChatHistory
         obj = cls(data['user_id'])
         obj.user_info = Person( data['user_info']['Name'])
-        obj.chat_log = ChatHistory()  # Здесь можно загрузить историю чата
+        obj.chat_log = ChatHistory()
         obj.last_seen = data['last_seen']
         obj.additional_info = data['additional_info']
         return obj
@@ -62,7 +61,7 @@ class UserDatabase:
                 return UserDatabase.fromDict(fields__)
         except FileNotFoundError:
             print(f"Файл {FilePath} не найден.")
-            return None  # Обработка отсутствия файла
+            return None
 
 
 def load_objects_from_folder(folder_path="Database"):
@@ -70,18 +69,15 @@ def load_objects_from_folder(folder_path="Database"):
     counter=0
     # Проходим по всем файлам в указанной папке
     for filename in os.listdir(folder_path):
-        # Проверяем, что файл имеет нужное расширение
         if filename.endswith('.json'):
             # Формируем полный путь к файлу
             file_path = os.path.join(folder_path, filename)
             try:
-                # Загружаем объект из файла
                 obj = UserDatabase.load(file_path)
                 # Добавляем объект в словарь по его user_id
                 objects_dict[obj.user_id] = obj
                 counter+=1
             except Exception as e:
-                # Обработка ошибок при загрузке файла
                 print(f"Ошибка при загрузке {file_path}: {e}")
 
     # Возвращаем словарь с загруженными объектами
